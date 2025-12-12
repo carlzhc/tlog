@@ -14,12 +14,14 @@ In your clojure files, require it:
 - trace
 - debug
 - info
+- notice
 - warn
 - error
 - fatal
 - tracef
 - debugf
 - infof
+- noticef
 - warnf
 - errorf
 - fatalf
@@ -27,7 +29,7 @@ In your clojure files, require it:
 
 ## example
 ```
-(log/set-limit! :debug) ; any keyword from [:trace :debug :info :warn :error :fatal]
+(log/set-limit! :debug) ; any keyword from [:trace :debug :info :notice :warn :error :fatal]
 (log/debug "hello world")
 (log/debugf "hello %s" "world")
 ```
