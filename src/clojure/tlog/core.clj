@@ -69,3 +69,22 @@
 (defmacro warnf   [& args] `(-log :warn   ~*file* ~(:line (meta &form)) true ~@args))
 (defmacro errorf  [& args] `(-log :error  ~*file* ~(:line (meta &form)) true ~@args))
 (defmacro fatalf  [& args] `(-log :fatal  ~*file* ~(:line (meta &form)) true ~@args))
+
+;; Truncate a string to `max-len` characters, optionally adding a suffix like "..."
+(defn truncate
+  ([s max-len]
+   (truncate s max-len ""))
+
+  ([s max-len suffix]
+   (cond
+     (nil? s) nil
+     (not (string? s)) (throw (IllegalArgumentException.
+                               "Input must be a string"))
+     (<= (count s) max-len) s
+     :else (str (subs s 0 max-len) suffix))))
+
+(defmacro spy [arg]
+  `(let [val# ~arg]
+     (-log :debug ~*file* ~(:line (meta &form)) false
+           (str (truncate (str (quote arg)) 40 "...") " => " val#))
+     val#))
