@@ -1,28 +1,22 @@
 (ns tlog.core
   (:require [clojure.string :as s]
             [clj-stacktrace.repl :as stacktrace]
-            [java-time :as jt])
+            [java-time.api :as jt])
   (:import [java.io ByteArrayOutputStream PrintWriter]))
 
 (set! *warn-on-reflection* true)
 
-(def levels (zipmap [:trace :debug :info :notice :warn :error :fatal] (range)))
+(def ^:private levels (zipmap [:trace :debug :info :notice :warn :error :fatal] (range)))
 (def limit (atom (:trace levels)))
-(def time-fmt "yyyy/MM/dd HH:mm:ss.SSS")
+(def time-fmt (atom "yyyy/MM/dd HH:mm:ss.SSS"))
+(def truncate-at (atom nil))
+(def truncate-suffix (atom nil))
+(def destination (atom System/out))
+
 
 (defn set-limit! [level]
-  (when-not (levels level) (throw (IllegalArgumentException. (str "unknown log elevel:" level))))
+  (when-not (levels level) (throw (IllegalArgumentException. (str "unknown log level:" level))))
   (reset! limit (levels level)))
-
-(defn join-args ^PrintWriter [^PrintWriter out args]
-  (let [e (when (instance? Throwable (first args)) (first args))]
-    (doseq [arg (if e (rest args) args)]
-      (.print out (str arg))
-      (.print out \space))
-    (.print out \newline)
-    (when e
-      (stacktrace/pst-on out false e)))
-  out)
 
 (defn make-log-message ^bytes [file line level format-args & args]
   (let [buffer (ByteArrayOutputStream. 256)
@@ -32,7 +26,7 @@
     (doto out
       (.print (name level))
       (.print \space)
-      (.print (jt/format time-fmt (jt/local-date-time)))
+      (.print (jt/format @time-fmt (jt/local-date-time)))
       (.print " [")
       (.print file)
       (.print \:)
@@ -46,10 +40,11 @@
     (.flush out)
     (.toByteArray buffer)))
 
+
 (defmacro -log [level file line format-args & args]
   `(when (>= ~(levels level) (deref limit))
-     (.write System/out (make-log-message ~file ~line ~level ~format-args ~@args))
-     (.flush System/out)))
+     (.write (deref destination) (make-log-message ~file ~line ~level ~format-args ~@args))
+     (.flush (deref destination))))
 
 (defmacro log [level & args] `(-log ~level ~*file* ~(:line (meta &form)) false ~@args))
 (defmacro logf [level & args] `(-log ~level ~*file* ~(:line (meta &form)) true ~@args))
@@ -71,9 +66,11 @@
 (defmacro fatalf  [& args] `(-log :fatal  ~*file* ~(:line (meta &form)) true ~@args))
 
 ;; Truncate a string to `max-len` characters, optionally adding a suffix like "..."
-(defn truncate
+(defn- truncate
+  ([s]
+   (truncate s @truncate-at @truncate-suffix))
   ([s max-len]
-   (truncate s max-len ""))
+   (truncate s max-len @truncate-suffix))
 
   ([s max-len suffix]
    (cond
@@ -84,7 +81,8 @@
      :else (str (subs s 0 max-len) suffix))))
 
 (defmacro spy [arg]
+  "Eval the arg, log the output, then return the result."
   `(let [val# ~arg]
      (-log :debug ~*file* ~(:line (meta &form)) false
-           (str (truncate (str (quote arg)) 40 "...") " => " val#))
+           (str (truncate (str (quote arg)) (or @trancate-at 40) (or @truncate-suffix "...")) " => " val#))
      val#))
