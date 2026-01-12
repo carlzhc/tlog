@@ -8,10 +8,10 @@
 
 (def ^:private levels (zipmap [:trace :debug :info :notice :warn :error :fatal] (range)))
 (def limit (atom (:trace levels)))
-(def time-fmt (atom "yyyy/MM/dd HH:mm:ss.SSS"))
-(def truncate-at (atom nil))
-(def truncate-suffix (atom nil))
-(def destination (atom System/out))
+(def ^:dynamic *time-fmt* "yyyy/MM/dd HH:mm:ss.SSS")
+(def ^:dynamic *truncate-at* nil)
+(def ^:dynamic *truncate-suffix* nil)
+(def ^:dynamic *destination* System/out)
 
 
 (defn set-limit! [level]
@@ -26,15 +26,15 @@
     (doto out
       (.print (name level))
       (.print \space)
-      (.print (jt/format @time-fmt (jt/local-date-time)))
+      (.print (jt/format *time-fmt* (jt/local-date-time)))
       (.print " [")
       (.print file)
       (.print \:)
       (.print line)
-      (.print "]: "))
-    (.println out (if format-args
-                    (apply format args)
-                    (s/join \space args)))
+      (.print "]: ")
+      (.println (if format-args
+                  (apply format args)
+                  (s/join \space args))))
     (when e
       (stacktrace/pst-on out false e))
     (.flush out)
@@ -43,8 +43,8 @@
 
 (defmacro -log [level file line format-args & args]
   `(when (>= ~(levels level) (deref limit))
-     (.write (deref destination) (make-log-message ~file ~line ~level ~format-args ~@args))
-     (.flush (deref destination))))
+     (.write *destination* (make-log-message ~file ~line ~level ~format-args ~@args))
+     (.flush *destination*)))
 
 (defmacro log [level & args] `(-log ~level ~*file* ~(:line (meta &form)) false ~@args))
 (defmacro logf [level & args] `(-log ~level ~*file* ~(:line (meta &form)) true ~@args))
@@ -66,11 +66,11 @@
 (defmacro fatalf  [& args] `(-log :fatal  ~*file* ~(:line (meta &form)) true ~@args))
 
 ;; Truncate a string to `max-len` characters, optionally adding a suffix like "..."
-(defn- truncate
+(defn truncate
   ([s]
-   (truncate s @truncate-at @truncate-suffix))
+   (truncate s *truncate-at* *truncate-suffix*))
   ([s max-len]
-   (truncate s max-len @truncate-suffix))
+   (truncate s max-len *truncate-suffix*))
 
   ([s max-len suffix]
    (cond
@@ -84,5 +84,8 @@
   "Eval the arg, log the output, then return the result."
   `(let [val# ~arg]
      (-log :debug ~*file* ~(:line (meta &form)) false
-           (str (truncate (str (quote arg)) (or @trancate-at 40) (or @truncate-suffix "...")) " => " val#))
+           (str (truncate (str (quote ~arg))
+                          (or *truncate-at* 40)
+                          (or *truncate-suffix* "..."))
+                " => " val#))
      val#))
